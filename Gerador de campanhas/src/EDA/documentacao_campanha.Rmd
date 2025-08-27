@@ -1,0 +1,690 @@
+---
+title: "Análise exploratória para futuras campanhas V8"
+output:
+  html_notebook:
+    toc: true
+---
+
+```{r setup, echo=FALSE, include=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+# definindo log de avisoa
+options(warn = -1)
+
+#libraries
+library(readr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(lattice)
+library(patchwork)
+
+
+
+# Carregando dados
+## Amostra contendo dados dos últimos 30 dias
+
+amostra <- read_csv("y:/FINANCEIRO/Fagner/Thais/Gerador de campanhas/input_data/tendencia.csv")
+
+amostra_limpa <- amostra[complete.cases(amostra), ]
+dados_prod <- amostra_limpa[, c('jan_prod', 'fev_prod', 'mar_prod', 'abr_prod', 'mai_prod', 'jun_prod', 'jul_prod')]
+dados_prod <- dados_prod %>%
+  mutate(
+    ret_fev = round(((fev_prod / jan_prod) - 1) * 100, 2),
+    ret_mar = round(((mar_prod / fev_prod) - 1) * 100, 2),
+    ret_abr = round(((abr_prod / mar_prod) - 1) * 100, 2),
+    ret_mai = round(((mai_prod / abr_prod) - 1) * 100, 2),
+    ret_jun = round(((jun_prod / mai_prod) - 1) * 100, 2),
+    ret_jul = round(((jul_prod / jun_prod) - 1) * 100, 2),
+  )
+
+df_retorno <- dados_prod[, c("ret_fev", "ret_mar", "ret_abr", "ret_mai", "ret_jun")]
+df_retorno$mean_var <- rowMeans(df_retorno)
+index_outliers <- scale(df_retorno$mean_var) > 2
+df_retorno <- df_retorno[!index_outliers, ]
+
+# dataset com valores
+df_valores <- dados_prod[, c('jan_prod', 'fev_prod', 'mar_prod', 'abr_prod', 'mai_prod', 'jun_prod', 'jul_prod')]
+df_valores$mean_var <- rowMeans(df_valores)
+index_outliers <- scale(df_valores$mean_var) > 2
+
+df_valores_in <- df_valores[!index_outliers, ]
+df_valores_out <- df_valores[index_outliers, ]
+
+
+## função para retornar o desvio padrão de dados log-transformados
+retorno_sd_des_logtransformtation <- function(log_mean, log_deviation){
+      
+  standart_deviation = sqrt((exp(log_deviation **2) - 1) * 
+             exp(2 * log_mean + log_deviation ** 2))
+
+  return(standart_deviation)
+  
+}
+
+# Congelando aleatoriedade
+set.seed(40)
+
+
+```
+
+
+```{r, include=FALSE}
+
+
+
+# função para gerar gráfico
+comparando_medias <- function(dados){
+
+  ordered_months <- c('sem_iphone', 'iphone')
+  colnames(dados) <- c("sample_id", 'dados')
+  toPlot <- data.frame(
+    
+    sample_id = as.character(),
+    mean = as.numeric(),
+    lower = as.numeric(),
+    upper = as.numeric(),
+    stringsAsFactors = FALSE
+  )
+
+  for (comercial in unique(dados$sample_id)) {
+    
+          amostra <- dados[dados$sample_id == comercial, ]
+          
+          # escrever funC'C#o para concatenar todas as amostrar
+          media = mean(amostra$dados)
+          desvio = sd(amostra$dados)
+          erro_padrao_amostra = desvio / sqrt(nrow(amostra))
+          #calculando limites inferior e superios
+          lower <- round(media - 1.96 * erro_padrao_amostra, 2)
+          upper <- round(media + 1.96 * erro_padrao_amostra, 2)
+          toPlot <- rbind(
+            toPlot, data.frame(
+              sample_id = comercial,
+              mean = media,
+              lower = lower,
+              upper = upper
+            )
+          )
+          
+      }  
+  ggplot(toPlot, mapping = aes(x = as.factor(sample_id) %>% ordered(ordered_months), y = mean, colour = mean)) +
+    geom_point(size = 2) +
+    geom_errorbar(aes(ymin = lower, ymax = upper), width = .1, linewidth = 1.1) +
+    theme_bw() +
+    labs(x = " ",
+         y = "Média de contratos por parceiros",
+         title = 'Comparação entre médias e variâncias',
+         subtitle = 'campanha do iphone',
+         caption = "Fonte: BFF e campanha do iphone") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          plot.title = element_text(colour = "#0099F8", size = 12, face = 'bold'),
+          plot.subtitle = element_text(size = 10, face = 'bold'),
+          plot.caption =  element_text(face = 'italic'),
+          legend.position = 'none') +
+    scale_x_discrete(labels = c('iphone'="Com campanha", 'sem_iphone'="Sem campanha"))
+  
+}
+```
+
+
+### Detalhes sobre os grupos
+
+Ao bucar a média de retorno dos últimos 6 meses de alguns parceiros, é possível perceber há grande variância.
+
+Como exemplo, se no mês de maio a produção foi de R$50mil, e, no mês de junho R$100mil, a série de retornos trará um aumento de 100%.
+
+Este é fato que impossibilita traçar uma única política como campanha (e.g. acrescimo de 10% no valor produzido).
+
+A tabela abaixo apresenta os retornos de 5 parceiros, e a média no período de fevereiro a junho.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+options(warn = -1)
+df_1 <- df_retorno[1:5, ]
+
+colnames(df_1) <- c("Fevereiro", "Março", "Abril", "Maio", "Junho", "Média")
+
+df_1 %>% 
+  knitr::kable(caption = 'Amostra - tendência de retornos por mês (2025)')
+
+```
+
+
+
+À esquerda, a linha representa o comportamento dos retornos de produção dos parceiros v8; à direta, como deveriam ser para que fosse possível capturar um padrão traçar uma campanha no formato de meta percentual fixa. 
+
+```{r, include=FALSE}
+
+order_months <- c('ret_fev', 'ret_mar', 'ret_abr', 'ret_mai', 'ret_jun')
+
+line_1 <- df_retorno[100, -6]
+pivot_line <- line_1 %>% pivot_longer(cols = everything(),
+                        names_to = "mes",
+                        values_to = 'retorno')
+pivot_line$mes <- as.factor(pivot_line$mes) %>% ordered(order_months)
+
+p1 <- pivot_line %>% ggplot(mapping = aes(x = mes, y = retorno, group = 1)) +
+  geom_line() +
+  theme_light() +
+  geom_hline(yintercept = 10, linetype = 'dashed', col = 'blue') +
+  labs(y = "Retorno (%)", 
+       x = "Mês", 
+       title = "Retorno com (alta) variância não linear",
+       subtitle = "dados reais") + 
+    theme(
+    plot.title = element_text(color = "#0099F8", size = 12, face = 'bold'),
+    plot.subtitle = element_text(size = 9, face = 'bold'),
+    plot.caption = element_text(face = 'italic')
+  )
+
+```
+
+
+
+```{r, include=FALSE}
+
+retorno_lineares <- data.frame(
+  mes = order_months,
+  retorno = c(-25, 25, -25, 25, -25)
+)
+
+retorno_lineares$mes <- as.factor(retorno_lineares$mes) %>% 
+  ordered(order_months)
+
+p2 <- retorno_lineares %>% ggplot(mapping = aes(x = mes, y = retorno, group = 1)) + 
+  geom_line() +
+  theme_light() +
+  geom_hline(yintercept = 0, linetype = 'dashed', col = 'blue') +
+  labs(y = "Retorno (%)", 
+       x = "Mês", 
+       title = "Retorno com variação linear",
+       subtitle = 'dados simulados') + 
+    theme(
+    plot.title = element_text(color = "#0099F8", size = 12, face = 'bold'),
+    plot.subtitle = element_text(size = 9, face = 'bold'),
+    plot.caption = element_text(face = 'italic')
+  )
+
+```
+
+```{r, echo=FALSE, fig.align='center', fig.dim=c(10,5)}
+
+par(mfrow=c(2, 1))
+p1 + p2
+par(mfrow=c(1, 1))
+```
+
+
+
+
+
+```{r, include=FALSE, fig.align='center', fig.align='center', fig.dim=c(10,5)}
+
+
+
+#### Explicando a diferença.
+
+##### Retorno ideal (simulado)
+
+# Se os retornos fossem linearmente distribuídos haveria um padrão identificável, permitindo-se traçar parâmetros para a campanha de forma genérica, e, ao mesmo tempo, garantir a mesma probabilidade à grande maioria dos parceiros.
+# 
+# Nestes casos, supondo um retorno médio de 20%, poderia-se afirmar, por exemplo, que:
+# 
+# 1 - Em aproximadamente 68,26% dos casos, a média de retorno estaria entre 14% e 26%.
+# 
+# 2 - Em aproximadamente 95.44% casos, a média de retorno estaria entre 26% e 32%.
+# 
+# 3 - Em aproximadamente 99.74% casos, a média de retorno estaria entre 38% e 44%.
+
+ggplot() + 
+  geom_histogram(aes(rnorm(500)), color = '#000000', fill = '#0099F8', alpha = .4) +
+  theme_bw() + 
+  labs(title = "Distribuição ideal", 
+       subtitle = 'quantidade por faixa de valores',
+       caption = 'Fonte: BFF (dias 19 ao 25 dos últimos 6 meses)',
+       x = "Valores (transformados)", 
+       y = "Frequencia") +
+  theme(
+    plot.title = element_text(color = "#0099F8", size = 16, face = 'bold'),
+    plot.subtitle = element_text(size = 10, face = 'bold'),
+    plot.caption = element_text(face = 'italic')
+  )
+
+```
+
+##### Retornos reais
+Os retornos reais, contudo, demonstram grande variância (de -90% à 3000%), e forma não lineare (sem padrão identificável e contínuo).
+
+Mesmo tratando a não-linearidade, a grande variância dos retornos é um impedimento ainda presente para se fixar apenas um limiar para todos os parceiros.
+
+
+```{r, echo=FALSE, fig.align='center', fig.dim=c(10,5)}
+
+media <- mean(log(df_retorno$mean_var), na.rm = TRUE)
+desvio <- sd(log(df_retorno$mean_var), na.rm = TRUE)
+
+
+p2 <- ggplot() + 
+  geom_histogram(aes(df_retorno$mean_var), color = '#000000', fill = '#6C3BAA', alpha = .4) +
+  geom_vline(xintercept = round((exp(media) + retorno_sd_des_logtransformtation(media,desvio)), 2), color = '#6C3BAA', linetype = 2) +
+  theme_bw() + 
+  labs(title = "Distribuição real", 
+       subtitle = 'quantidade por faixas de valores',
+       caption = 'Fonte: BFF (dias 19 ao 25 dos últimos 6 meses)',
+       x = "Valores (transformados)", 
+       y = "Frequencia") +
+  theme(
+    plot.title = element_text(color = "#0099F8", size = 16, face = 'bold'),
+    plot.subtitle = element_text(size = 10, face = 'bold'),
+    plot.caption = element_text(face = 'italic')
+  )
+
+
+
+## calculando posução dos 10% previstos
+
+
+p3 <- ggplot() + 
+  geom_histogram(aes(log(df_retorno$mean_var)), color = '#000000', fill = '#6C3BAA', alpha = .4) +
+  geom_vline(xintercept = (media + desvio), color = '#6C3BAA', linetype = 2) +
+  geom_vline(xintercept = (media - desvio), color = '#6C3BAA', linetype = 2) +
+  theme_bw() + 
+  labs(title = "Frequência real", 
+       subtitle = 'quantidade por faixas de valores - log-transformado',
+       caption = 'Fonte: BFF (dias 19 ao 25 dos últimos 6 meses)',
+       x = "Valores reais", 
+       y = "Frequencia") +
+  theme(
+    plot.title = element_text(color = "#0099F8", size = 16, face = 'bold'),
+    plot.subtitle = element_text(size = 10, face = 'bold'),
+    plot.caption = element_text(face = 'italic')
+  )
+
+p2 + p3
+
+```
+
+
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+options(warn = -1)
+
+media <- mean(log(df_retorno$mean_var), na.rm = TRUE)
+desvio <- sd(log(df_retorno$mean_var), na.rm = TRUE)
+paste("Em escala real, a média é de ", round(exp(media), 2), "% e o desvio é de ", round(retorno_sd_des_logtransformtation(media,desvio), 2), "%")
+
+```
+
+
+No caso dos perceiros da v8, considerando-se os retornos positivos, pode-se afirmar que:
+
+Usando o seguinte procedimento, podemos apurar que:
+
+
+1 - Em aproximadamente 54% dos cacos, a média de retorno será maios que 10%
+
+2 - Em aproximadamente 50% dos casos, a média de retorno será maior que 26,5%
+
+3 - Em aproximadamente 16% dos casos, a média de retorno será maior 176.23%.
+
+4 - Em aproximadamente 2,5% casos, a média de retorno será maior que 325.96%.
+
+5 - Em aproximadamente 0.15% casos, a média de retorno será maior que 475.69%.
+
+
+```{r, echo=FALSE, include=FALSE}
+
+#A probabilidade associada ao retorno de 10% (ou menor), é muito baixa (cerca de 2.41%) | 97.59% dos retornos serão maiores.
+#A probabilidade associada ao retorno médio (26% ou menor), é de 50% | 50% dos retornos serão maiores.
+#A probabilidade associada ao retorno de 1 desvio (176% ou menor) é de 81.74% | 18.26% dos retornos serão maiores
+```
+
+
+### Sugestão para novas campanhas
+
+Identificar grupos que tenham características diferentes em relação ao valor produzido, e basear a campanha para o crescimento dentro do grupo.
+
+
+```{r, include=FALSE}
+
+
+
+kmeans_treined <- kmeans(log(df_valores_in$mean_var), centers = 5)
+
+df_valores_in$cluster <- kmeans_treined$cluster
+
+
+
+```
+
+
+```{r, include=FALSE}
+
+df_valores_in
+
+df_valores_out$cluster <- 6
+
+df_valores <- rbind(df_valores_in, df_valores_out)
+
+```
+
+
+
+```{r, echo=FALSE}
+
+p4 <- ggplot(data = df_valores[df_valores$mean_var < 2000000, ], mapping = aes(x = mean_var, y = factor(cluster), fill = as.factor(cluster))) +
+  geom_boxplot() +
+  theme_bw() + 
+  labs(
+    title = 'Distribuição de valores por grupo',
+    subtitle = 'cluster calculado com kmeans e dados log-transformados',
+    caption = 'Fonte: BFF (dias 19 ao 25 dos últimos 6 meses)',
+    x = 'Valores',
+    y = 'Grupos'
+    ) +
+  theme(
+    legend.position = 'none',
+    plot.title = element_text(color = '#0099F8', size=16, face = 'bold'),
+    plot.subtitle = element_text(size = 10, face = 'bold'),
+    plot.caption = element_text(face = 'italic')
+    
+  )
+
+
+p4
+
+```
+
+Os grupos são formados levando em consideração regiões de valores em que há maior concentração de parceiros.
+
+Por exemplo, no grupo 5, há parceiros entre 60mil e 250mil, entretando, 50% deles estão entre 65mil e 130mil, sendo que, ainda mais concentrado no valor de 90mil.
+
+Isso significa que podemos atingir um maior número de parceiros, dentro desta faixa, se mirarmos nos parceiros que produzem perto da média, e, fazendo-os elevar o valor produzido.
+
+
+Em resumo, estaremos estimulando a maior fração de parceiros dentro desta faixa à buscar um valor que, de fato, representa um desafio, mas, é bastante provável.
+
+#### Características dos grupos
+```{r, echo=FALSE}
+
+# função para retornar características
+total = nrow(df_valores[df_valores$mean_var < 2000000, ])
+# medidas de tendência central
+resumo <- df_valores[df_valores$mean_var < 2000000, ] %>%
+  group_by(cluster) %>%
+  summarise(
+    concentracao = paste(round(quantile(mean_var, .25), 2), "-", round(quantile(mean_var, .75), 2)),
+    mediana = round(quantile(mean_var, .50), 2),
+    #min_max = paste(round(min(mean_var), 2),"-", round(max(mean_var), 2)),
+    proprocao_grupos = round(n() / total * 100, 2)
+  ) %>% arrange(desc(mediana)) %>% ungroup()
+
+
+# colnames(resumo) <- c("Grupo", "Concentração(50%)", "Media", "Mínimo - Máximo", "Representatividade")
+colnames(resumo) <- c("Grupo", "Concentração(50%)", "Media", "Representatividade")
+
+resumo %>% knitr::kable(caption = "Estatísticas por grupo")
+
+# resumo
+
+```
+
+
+Quanto maiores são os valores produzidos, menos parceiros estarão representados pela campanha. Por isso, é crucial definir o objetivo da campanha, e depois as políticas.
+
+
+```{r, echo=FALSE}
+
+ggplot(data = resumo, mapping = aes(y = Representatividade, x = as.factor(Grupo), fill = as.factor(Grupo))) + 
+  geom_col() +
+  theme_bw() + 
+  labs(
+    title = "Quantidade de parceiros",
+    subtitle = "quantidade por grupo",
+    caption = 'Fonte: BFF (dias 19 ao 25 dos últimos 6 meses)',
+    x = 'Grupos',
+    y = 'Representatividade (%)'
+    
+  ) + 
+  theme(
+    plot.title = element_text(color = "#0099F8", size = 16, face = 'bold'),
+    plot.subtitle = element_text(size = 10, face = 'bold'),
+    plot.caption = element_text(face = 'italic'),
+    legend.position = 'none'
+)
+
+
+```
+
+
+Com base na amostra colhida, o grupo 5 tem a maior faixa de valor (R$ 65.085,28 - R$ 130.626,53), mas, representa apenas 8,86% dos parceiros.
+
+
+#### Definindo faixas
+
+A campanha pode ser modelada de acordo com os objetivos, e, observando as características dos parceiros.
+
+Abaixo, sugestão de campanha focada nos 90% dos parceiros da amostra colhida.
+
+Sugere-se com valores para faixas, o correspondente ao terceiro quartil de cada grupo (.75%). 
+
+Assim, promoveremos o aumento da produção dentro de cada grupo.
+
+##### Faixas:
+
+|Faixa | Valor | Representatividade| Objetivo |
+|------|--------|------------------|----------|
+| Faixa 1| R$ 10.596.96| 72,76% | Deslocar a média de 6mil para para 10,5mil| 
+| Faixa 2 |  R$ 27.173.08 | 16,71% | Deslocar a média de 16,5mil para para 27mil|
+| Faixa 3 | R$ 130.626.53 | 8,86% | Deslocar a média de 90mil para para 130mil|
+| Faixa 4 | R$ 700.000,00 | 1,67% | Deslocar a média de 400mil para para 700mil|
+
+As faixas podem ser alteráveis de acordo com o objetivo da campanha.
+
+##### **Premiação sugerida:**
+
+*Suposições*
+
+Com base em [estudos anteriores](https://rpubs.com/Fagner1/1264472), é possível afirmar (com 95% de certeza) que o valor de emissão das propostas estará entre R$ 110,00 e 156,00. Sendo 110,00 a moda (valor que mais se digita na tabela, e, como média 153,21 - OBS: os dados são assimétricos)
+
+
+Nesta faixa de valor
+
+
+
+|Faixa | Premiação |Meta | Parceiros na premiação | Valor previsto |
+|------|--------|------------------|----------|
+| Faixa 1| R$ 250,00 | R$ 10.596.96  | 295 | R$ 73.000,00 | 
+| Faixa 2 | R$ 500,00 | R$ 27.173.08 | 139 | R$ 69.500,00 |
+| Faixa 3 | R$ 1.000,00  | R$ 130.626.53 | 30 | 30.000,00 |
+| Faixa 4 | R$ 1.500,00  | R$ 700.000,00 | 5 | 7.500,00 |
+
+*Custo mínimo previsto*: **R$ 180.000,00**
+
+
+```{r, include=FALSE}
+# 
+# quanto aumentaremos de faturamento a cada parceiro que consiga atingir a meta dentro do seu grupo
+# 
+# -- fazer uma regressão linear
+# - modelagem
+# preciso prever (y) qual é o valor gerado dado que n (x) quantidade de contratos
+# 
+# preciso, para cada cluster, o valor gerado pelo parceiro e quantidade de contratos
+# 
+# resultad0: para cada contrato à mais, prevemos teremos x de lucro
+# 
+# estimativa é de que para chegar ao valor, o parceira tenha que digitar x contratos
+```
+
+
+
+### Avaliação da campanha do iphone
+
+**Objetivos declarados**
+
+*Esta CAMPANHA tem por objetivo, mediante distribuição de prêmios (“PREMIAÇÃO”), fomentar a produção de FGTS nas tabelas TURBO e ACELERA, produto disponível pelo ORGANIZADOR, segundo os critérios definidos neste regulamento*.(SIC)
+
+
+**Vigência**
+22/10/2024 até o dia 30/11/2024
+
+**Período comparado**
+16/09/2024 até o dia 21/10/2024
+
+
+```{r, include=FALSE}
+
+# carregando dados
+campanha <- read_csv("y:/FINANCEIRO/Fagner/Thais/Gerador de campanhas/input_data/campanha_iphone.csv")
+anterior <- read_csv("y:/FINANCEIRO/Fagner/Thais/Gerador de campanhas/input_data/campanha_iphone_anterior.csv")
+
+
+
+## Tamanho das amostras
+
+```
+
+
+```{r, include=FALSE}
+
+# - Aplicar o test-t de 2 amostras: vamos comparar a média de contratos digitados no mês da campanha com o mês anterior, e, pensar em comparar com a média de digitação dos últimos 6 meses anteriores à campanha.
+# - Validação de suposições estatísticas
+# - Os dados são contínuos
+# - As amostras são aleatórias
+# - As demais suposições serão validadas abaixo
+# Modelagem:
+# H0: Não há correlação linear estatisticamente significante, as amostras são independentes.
+# Ha: Há correlação linear estatisticamente significante, as amostras não são independentes.
+
+# preprocessamento campanha
+campanha$frequencia_log <- log(campanha$frequencia)
+index_scales_campanha <- abs(scale(campanha$frequencia_log)) > 3
+campanha_sem_outliers <- campanha[!index_scales_campanha, ]
+
+
+
+```
+
+
+```{r, include=FALSE}
+
+# preprocessamento anterior
+anterior$frequencia_log <- log(anterior$frequencia)
+index_scales_anterior <- abs(scale(anterior$frequencia_log)) > 3
+anterior_sem_outliers <- anterior[!index_scales_anterior, ]
+
+
+```
+
+
+
+```{r, include=FALSE}
+# Normalidade  e homogeineidade das distribuições
+
+
+
+campanha_sem_outliers$frequencia_log_scaled <- scale(campanha_sem_outliers$frequencia_log)
+anterior_sem_outliers$frequencia_log_scaled <- scale(anterior_sem_outliers$frequencia_log)
+
+par(mfrow = c(2, 2))
+hist(scale(campanha_sem_outliers$frequencia_log_scaled))
+hist(scale(campanha_sem_outliers$frequencia_log_scaled))
+boxplot(scale(campanha_sem_outliers$frequencia_log_scaled))
+boxplot(scale(campanha_sem_outliers$frequencia_log_scaled))
+par(mfrow = c(1, 1))
+
+
+cat("Histograma demonstra distribuição próxima à normal, e boxplots demonstas média e quartis próximos")
+
+```
+
+```{r, include=FALSE}
+# ajustando dimensões
+campanha_sem_outliers <- campanha_sem_outliers[37:nrow(campanha_sem_outliers), ]
+anterior_sem_outliers
+
+```
+
+
+```{r, include=FALSE}
+# Independência entre as amostras - correlação pearson
+
+result_cor <- cor.test(campanha_sem_outliers$frequencia_log_scaled, anterior_sem_outliers$frequencia_log_scaled, 
+    method = 'pearson')
+
+
+cat("Com p-value de ", result_cor$p.value, "não se rejeita a hipótese nula. Confirmando que as amostras são independentes")
+
+```
+
+
+```{r, include=FALSE}
+
+#### Aplicando teste de hipótese
+# H0: Não existe difetença entre os 2 grupos. Os valores são parecidos.
+# Ha: Existe difetença entre os 2 grupos. Os valores não são parecidos.
+
+result_testt <- t.test(campanha_sem_outliers$frequencia_log_scaled, anterior_sem_outliers$frequencia_log_scaled, alternative = 'g')
+
+
+```
+
+
+```{r, include=FALSE}
+
+campanha_sem_outliers$sample_id <- 'iphone'
+anterior_sem_outliers$sample_id <- 'sem_iphone'
+
+
+df_concat <- rbind(campanha_sem_outliers[, c("sample_id", "frequencia_log_scaled", "frequencia")], anterior_sem_outliers[, c("sample_id", "frequencia_log_scaled", "frequencia")])
+
+```
+
+
+
+
+```{r, echo=FALSE}
+
+comparando_medias(dados = df_concat[, c("sample_id", 'frequencia')])
+
+```
+#### Resultado teste de hipótese (test-t)
+
+```{r, include=FALSE}
+
+result_testt$p.value
+```
+
+Conforme teste de hipótese (p-valor = 0.5267), é possível afirmar (com nível de confiança de 95%) que não houve diferença estatisticamente significante no volume médio de contratos digitados por parceiros.
+
+O gráfico acima e o teste de hipótese se complementam para demonstrar que:
+
+- A média de contratos digitados por parceiros no mesmo período anterior à campanha está entre 75/95 contratos.
+
+- A média de contratos digitados por parceiros durante a campanha está entre 85/105 contratos.
+
+Significa dizer que, mesmo ocorrendo um aumento, este aumento pode ser atribuído à variância média (natural) do número de contratos digitados por parceiros. Sendo assim, nas amostras comparadas, a campanha do iphone não gerou efeito relavante.
+
+
+### Conclusão
+
+Campanhas com metas de produção acima dos R$ 130.000,00 são muito improváveis para quase 98% dos parceiros. Portanto, se a campanha visa incentivar a produção na grande massa de parceiros, as metas devem ser menores.
+
+Os grupos acima são sugestões (estudos mais aprofundados podem ser realizados, visando destacar cada vez mais as diferenças entre eles), mas, são suficientes para demonstrar que existem concentrações de parceiros em algumas faixas de valores.
+
+As metas são desenhadas como um valor 'provável' para a os parceiros dentro das respectivas faixas, o que torna o incentivo à produção um objetivo palpável.
+
+Abaixo, a premiação sugerida por faixa de valor, e, previsão de investimento mínimo calculado com base no mês de julho/2025.
+
+|Faixa | Premiação |Meta | Parceiros na premiação | Valor previsto |
+|------|--------|------------------|----------|
+| Faixa 1| R$ 250,00 | R$ 10.596.96  | 295 | R$ 73.000,00 | 
+| Faixa 2 | R$ 500,00 | R$ 27.173.08 | 139 | R$ 69.500,00 |
+| Faixa 3 | R$ 1.000,00  | R$ 130.626.53 | 30 | 30.000,00 |
+| Faixa 4 | R$ 1.500,00  | R$ 700.000,00 | 5 | 7.500,00 |
+
+*Custo mínimo previsto*: **R$ 180.000,00**
+

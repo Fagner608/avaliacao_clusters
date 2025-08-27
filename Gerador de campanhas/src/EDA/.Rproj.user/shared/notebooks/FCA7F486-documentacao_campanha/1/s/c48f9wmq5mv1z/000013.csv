@@ -1,0 +1,1 @@
+"0","boxplot(scale(campanha_sem_outliers$frequencia_log_scaled))"

@@ -1,0 +1,7 @@
+"0",""
+"0","# preprocessamento anterior"
+"0","anterior$frequencia_log <- log(anterior$frequencia)"
+"0","index_scales_anterior <- abs(scale(anterior$frequencia_log)) > 3"
+"0","anterior_sem_outliers <- anterior[!index_scales_anterior, ]"
+"0",""
+"0",""

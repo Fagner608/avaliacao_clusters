@@ -1,0 +1,10 @@
+name: Publish Document
+title:
+username:
+account: rpubs
+server: rpubs.com
+hostUrl: rpubs.com
+appId: https://api.rpubs.com/api/v1/document/1332959/3917841dbcfb44aa920b0d081fd555f9
+bundleId: https://api.rpubs.com/api/v1/document/1332959/3917841dbcfb44aa920b0d081fd555f9
+url: http://rpubs.com/Fagner1/1332959
+version: 1

@@ -1,0 +1,7 @@
+"0",""
+"0","campanha_sem_outliers$sample_id <- 'iphone'"
+"0","anterior_sem_outliers$sample_id <- 'sem_iphone'"
+"0",""
+"0",""
+"0","df_concat <- rbind(campanha_sem_outliers[, c(""sample_id"", ""frequencia_log_scaled"", ""frequencia"")], anterior_sem_outliers[, c(""sample_id"", ""frequencia_log_scaled"", ""frequencia"")])"
+"0",""

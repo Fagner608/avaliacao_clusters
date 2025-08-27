@@ -1,0 +1,6 @@
+"0","kmeans_treined <- kmeans(log(df_valores$mean_var), centers = 5)"
+"0",""
+"0","df_valores$cluster <- kmeans_treined$cluster"
+"0",""
+"0",""
+"0",""

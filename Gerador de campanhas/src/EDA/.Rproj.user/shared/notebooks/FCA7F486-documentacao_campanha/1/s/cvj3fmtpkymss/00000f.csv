@@ -1,0 +1,8 @@
+"0",""
+"0","#### Aplicando teste de hipótese"
+"0","# H0: Não existe difetença entre os 2 grupos. Os valores são parecidos."
+"0","# Ha: Existe difetença entre os 2 grupos. Os valores não são parecidos."
+"0",""
+"0","result_testt <- t.test(campanha_sem_outliers$frequencia_log_scaled, anterior_sem_outliers$frequencia_log_scaled, alternative = 'g')"
+"0",""
+"0",""

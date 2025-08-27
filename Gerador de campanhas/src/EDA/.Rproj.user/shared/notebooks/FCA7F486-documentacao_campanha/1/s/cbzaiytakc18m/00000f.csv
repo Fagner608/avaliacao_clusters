@@ -1,0 +1,3 @@
+"0","# ajustando dimensões"
+"0","campanha_sem_outliers <- campanha_sem_outliers[37:nrow(campanha_sem_outliers), ]"
+"0","anterior_sem_outliers"

@@ -1,0 +1,5 @@
+"0",""
+"0","df_valores_out$cluster <- 6"
+"0",""
+"0","df_valores <- rbind(df_valores_in, df_valores_out)"
+"0",""
